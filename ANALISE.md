@@ -5,6 +5,8 @@ You can perform actions by emitting a single command line in exactly this format
 
 tool: NAME({"arg": "value"})
 
+>>> **3. [Tools] Sem tool calling nativo**
+
 Do not use JSON function-calling, a <tool_call> tag, or any other structured tool-call format your training may default to.
 The ONLY format the system running you understands is the plain text line above.
 
@@ -13,20 +15,18 @@ Available commands:
 TOOL
 ===
     Name: read_file
-    Description: 
-Gets the full content of a file provided by the user.
-:param filename: The name of the file to read.
-:return: The full content of the file.
+    Description: Gets the full content of a file provided by the user.
+    :param filename: The name of the file to read.
+    :return: The full content of the file.
 
     Signature: (filename: str) -> Dict[str, Any]
     
 TOOL
 ===
     Name: list_files
-    Description: 
-Lists the files in a directory provided by the user.
-:param path: The path to a directory to list files from.
-:return: A list of files in the directory.
+    Description: Lists the files in a directory provided by the user.
+    :param path: The path to a directory to list files from.
+    :return: A list of files in the directory.
 
     Signature: (path: str) -> Dict[str, Any]
 
@@ -34,12 +34,12 @@ TOOL
 ===
     Name: edit_file
     Description: 
-Replaces first occurrence of old_str with new_str in file. If old_str is empty,
-create/overwrite file with new_str.
-:param path: The path to the file to edit.
-:param old_str: The string to replace.
-:param new_str: The string to replace with.
-:return: A dictionary with the path to the file and the action taken.
+    Replaces first occurrence of old_str with new_str in file. If old_str is empty,
+    create/overwrite file with new_str.
+    :param path: The path to the file to edit.
+    :param old_str: The string to replace.
+    :param new_str: The string to replace with.
+    :return: A dictionary with the path to the file and the action taken.
 
     Signature: (path: str, old_str: str, new_str: str) -> Dict[str, Any]
     
@@ -63,12 +63,12 @@ You::encontre e conserte o bug baseado no teste que está falhando em test_inven
 Thought...
  Vou iniciar o trabalho identificando os arquivos disponíveis e, em seguida, procurar pelo arquivo de teste mencionado.
 
->>> **3. [Tools]** 
-
 tool: list_files({"path": "."}) 
 
 Tool invocations:
  [('list_files', {'path': '.'})] 
+
+ >>> **3. [Tools] Chamada de ferramenta para leitura de arquivos** 
 
 Action...
  Tool:  list_files 
@@ -82,12 +82,15 @@ Observation...
 >>> 2 Iteração
 
 Thought...
+
  tool: read_file({"filename": "test_inventory.py"}) 
 
  >>> **2. [Contexto] Ele sabe que tem que ler o arquivo de inventory.py pelo contexto dado anteriormente na listagem dos list_file** 
 
 Tool invocations:
  [('read_file', {'filename': 'test_inventory.py'})] 
+
+ >>> **3. [Tools] Chamada de ferramenta para leitura do arquivo inventory** 
 
 Action...
  Tool:  read_file 
@@ -119,6 +122,8 @@ Thought...
 Tool invocations:
  [('read_file', {'filename': 'inventory.py'})] 
 
+ >>> **3. [Tools] Faz novamente a chamada de ferramenta para leitura do arquivo inventory** 
+
 Action...
  Tool:  read_file 
  Args:  {'filename': 'inventory.py'} 
@@ -137,7 +142,7 @@ O teste espera que `apply_discount(200, 10)` retorne `180` (10% de desconto), ma
 
 Deixa eu consertar:
 
->> **1.[Loop] SEGUNDO LOOP PARA NOVAMENTE**
+>> **1.[Loop] SEGUNDO LOOP PARA NOVAMENTE: Não houve chamada de ferramenta de edição**
 
 Tool invocations:
  [] 
@@ -149,11 +154,11 @@ O teste espera que `apply_discount(200, 10)` retorne `180` (10% de desconto), ma
 Deixa eu consertar:
 
 
->> **1.[Loop] VOLTA PARA O PRIMEIRO LOOP**
+>> **1.[Loop] VOLTA PARA O PRIMEIRO LOOP: Mando o prompt novamente**
 
 You::encontre e conserte o bug baseado no teste que está falhando em test_inventory.py
 
->> **1.[Loop] ENTRA NOVAMENTE PARA O SEGUNDO LOOP**
+>> **1.[Loop] ENTRA NOVAMENTE PARA O SEGUNDO LOOP: Ele tem o contexto do que deve fazer**
 
 >>> 1 Iteração
 
@@ -162,6 +167,8 @@ Thought...
 
 Tool invocations:
  [('edit_file', {'path': '/Users/maria.santos1.nufuturo/atividade-anatomia-agentes/inventory.py', 'old_str': '    return price - percent', 'new_str': '    return price - (price * percent / 100)'})] 
+
+>>> **3. [Tools] Chamada de ferramenta para edição do arquivo de inventory** 
 
 Action...
  Tool:  edit_file 
@@ -183,7 +190,7 @@ Para `apply_discount(200, 10)`:
 
 A correção substitui a subtração simples pelo cálculo do desconto percentual: `price - (price * percent / 100)`. Agora o teste `test_apply_discount` deve passar. 
 
->>> **4.[Thought] Trecho que não faz chamada de tool pois o agente concluiu a edição do arquivo de teste e considera que o bug foi ajustado.**
+>>> **4.[Thought] Trecho que não faz chamada de tool pois o agente concluiu a edição do arquivo que possuia o bug e considera que o bug foi ajustado.**
 
 Tool invocations:
  [] 
@@ -203,9 +210,9 @@ A correção substitui a subtração simples pelo cálculo do desconto percentua
 
 5. **[Guardrail]**
 
-Eu fiz duas execuções porque esse modelo é não determinístico e as execuções diferem uma da outras. Para esta análise, utilizei a saida2.txt, pois foi nela que percebi que, quando o tool_invocations não retornava uma ferramenta, o segundo loop parava. Analisando o log, percebi que, após editar o arquivo de teste, o modelo simplesmente encerra o segundo loop e diz que o problema foi corrigido, mostrando a sua linha de raciocínio com base no teste que leu. Ou seja, ele parou achando que tinha terminado, sem de fato ter verificado se funcionou. Já na minha saida1.txt, o modelo me perguntou se eu queria executar os testes e eu respondi que sim. Porém, por não ter guardrails ele não conseguiu executar o teste, em vez disso, me mandou o comando para eu testar manualmente e mais uma vez explicou o seu raciocínio baseado no teste.
+Eu fiz duas execuções porque esse modelo é não determinístico e as execuções diferem uma da outras. Para esta análise, utilizei a saida2.txt pois foi nela que percebi que quando o tool_invocations não retornava uma ferramenta o segundo loop parava. Analisando o log percebi que após editar o arquivo de inventory.py, o modelo simplesmente encerra o segundo loop (pois não chama nenhuma ferramenta) e diz que o problema foi corrigido, mostrando a sua linha de raciocínio com base no teste que leu. Ou seja, ele parou achando que tinha terminado sem de fato ter verificado se funcionou. Já na minha saida1.txt, o modelo me perguntou se eu queria executar os testes e eu respondi que sim. Porém, por não ter guardrails ele não conseguiu executar o teste, em vez disso, me mandou o comando para eu testar manualmente e mais uma vez explicou o seu raciocínio baseado no teste.
 
-Se o agente tivesse guardrails, ele não sairia do segundo loop tantas vezes como saiu nas minhas interação. Como a condição de parada do segundo loop era simplesmente não haver chamada de ferramenta, ele apenas saía e esperava um próximo prompt do usuário. Com isso, a condição de parada não era o término real da tarefa, mas sim a ausência de uma chamada a ferramentas.
+Se o agente tivesse guardrails, ele não sairia do segundo loop tantas vezes como saiu nas minhas interação. Como a condição de parada do segundo loop era simplesmente não haver chamada de ferramenta, ele apenas saía e esperava um próximo prompt. Com isso, a condição de parada não era o término real da tarefa, mas sim a ausência de uma chamada a ferramentas.
 
 
 ````
